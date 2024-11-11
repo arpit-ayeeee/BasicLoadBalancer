@@ -1,89 +1,95 @@
-# Basic Load Balancer
+# Load Balancer with Go Using Consistent Hashing
 
-This Go package implements a simple HTTP load balancer using round-robin scheduling. The load balancer forwards incoming HTTP requests to a list of backend servers in a circular manner. If a server is not responding, the load balancer skips to the next available server.
+This project demonstrates a simple load balancer in Go that uses consistent hashing to distribute incoming HTTP requests across multiple backend servers. Consistent hashing ensures a relatively even distribution of load among servers and reduces disruption when servers are added or removed.
 
 ## Features
 
-- **Round-robin load balancing**: Distributes requests evenly across backend servers.
-- **Health Check**: Skips non-responsive servers and continues routing to live servers.
-- **Reverse Proxy**: Proxies incoming requests to target servers.
+- **Consistent Hashing**: Uses a consistent hashing algorithm to map requests to servers, reducing cache misses when nodes are added or removed.
+- **Reverse Proxy**: Uses `httputil.ReverseProxy` to forward incoming requests to backend servers.
+- **Dynamic Node Assignment**: Backend servers can be dynamically added or removed from the consistent hash ring.
 
-## Requirements
+## Overview
 
-- Go 1.16 or higher
+The implementation uses `github.com/google/uuid` for generating unique keys for each incoming request. Based on this key, the consistent hash function determines the nearest server node to forward the request. This way, requests are evenly distributed, and hash collisions are managed.
 
-## Getting Started
+## Installation
 
-### Installation
-
-1. **Clone the repository**:
+1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo-url.git
+   git clone https://github.com/yourusername/consistent-hashing-lb.git
+   cd consistent-hashing-lb
    ```
 
-2. **Navigate to the project directory**:
+2. Initialize and download dependencies:
    ```bash
-   cd your-project-directory
+   go mod tidy
    ```
 
-### Usage
+3. Install required dependencies:
+   ```bash
+   go get github.com/google/uuid
+   ```
 
-The package creates a load balancer that listens on a specified port (default `8000` in this code) and forwards requests to a list of specified backend servers.
+## Structure
 
-### Code Walkthrough
+### Core Components
 
-- **main()**: Initializes the server instances and starts the load balancer on port `8000`.
-- **LoadBalancer**:
-  - `getNextAvailableServer()`: Selects the next available server using a round-robin algorithm.
-  - `serverProxy()`: Routes the HTTP request to the selected server.
-- **simpleServer**:
-  - `Serve()`: Handles request forwarding using the `httputil.ReverseProxy`.
-  - `IsAlive()`: Currently returns `true` for all servers (can be extended for actual health checks).
+- **`Server` interface**: Defines basic methods (`Address`, `IsAlive`, `Serve`) for each backend server.
+- **`simpleServer` struct**: Implements the `Server` interface and uses `httputil.ReverseProxy` to forward requests.
+- **`LoadBalancer` struct**: Manages the list of servers and handles request distribution.
+- **`ConsistentHash` struct**: Manages the hash ring and mapping of request keys to server nodes.
 
-### Running the Code
+### Important Methods
 
-To run the load balancer:
+1. **`AddNode`**: Adds a server to the hash ring, assigning it a hash key based on its address.
+2. **`RemoveNode`**: Removes a server from the hash ring, deleting its key mapping.
+3. **`Assign`**: Finds the appropriate server node for a given request key by looking up the closest server in the hash ring.
+4. **`serverProxy`**: Routes incoming requests to the server selected by the consistent hashing mechanism.
+
+## Usage
+
+1. **Define Servers**: In `main()`, initialize backend servers using the `newSimpleServer` function.
+2. **Set Up Load Balancer**: Initialize a `LoadBalancer` instance with the port number and list of servers.
+3. **Set Up Consistent Hashing**: Create a `ConsistentHash` instance and add the server nodes to the hash ring.
+4. **Start HTTP Server**: Set up an HTTP server that forwards requests to the load balancer’s `serverProxy` function, and listens for incoming requests.
+
+## Example
+
+To run the load balancer, simply execute:
+
 ```bash
 go run main.go
 ```
 
-### Example Configuration
+This starts a server on `localhost:8000`, which will forward requests to either Facebook, Google, or Instagram, as per the consistent hashing algorithm.
 
-The `main.go` initializes three backend servers:
+### Sample Output
 
-```go
-servers := []Server{
-    newSimpleServer("https://www.facebook.com"),
-    newSimpleServer("https://www.google.com"),
-    newSimpleServer("https://www.instagram.com"),
-}
 ```
-
-The server listens on port `8000` and routes requests to the backend servers in a round-robin sequence.
-
-### Load Balancer Struct
-
-- **Fields**:
-  - `port`: The port on which the load balancer listens.
-  - `roundRobinCount`: Keeps track of the last served server for round-robin selection.
-  - `servers`: A slice of `Server` interfaces representing backend servers.
-
-## API Endpoints
-
-- **/**: All incoming requests are routed through the load balancer, which selects the next available server and proxies the request.
-
-## Example Output
-
-Upon running, the server displays logs of incoming requests and the server addresses to which requests are forwarded:
-
-```plaintext
+Added node https://www.facebook.com at key 4
+Added node https://www.google.com at key 22
+Added node https://www.instagram.com at key 30
 Starting server on port 8000
-Forwarding request to address https://www.facebook.com
 Forwarding request to address https://www.google.com
-Forwarding request to address https://www.instagram.com
+Forwarding request to address https://www.facebook.com
 ```
 
-## Extending the Package
+### Test the Load Balancer
 
-1. **Health Checks**: Modify `IsAlive()` to perform an actual health check to ensure the backend server is available.
-2. **Dynamic Server Addition**: Add functionality to add or remove servers dynamically.
+Once the server is running, make a few HTTP requests to `http://localhost:8000` using a browser or a tool like `curl`:
+
+```bash
+curl http://localhost:8000
+```
+
+You should see requests being forwarded to different servers based on the consistent hashing logic.
+
+## Dependencies
+
+- **Go Modules**: Ensure you have Go modules enabled.
+- **External Packages**:
+  - `github.com/google/uuid` for generating unique request IDs.
+  - `net/http/httputil` for reverse proxying requests.
+  - `crypto/sha256` for hashing.
+
+This implementation provides a foundational understanding of consistent hashing-based load balancing, reverse proxying, and basic server health management.
